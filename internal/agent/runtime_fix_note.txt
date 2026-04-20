@@ -1,0 +1,3 @@
+The local workspace contains updated internal/agent/runtime.go, tools.go, and runtime_test.go implementing stronger memory extraction and memory question answering.
+
+If this note is present, check the latest local zip or pull the updated source from the local workspace if connector file replacement is unavailable.
