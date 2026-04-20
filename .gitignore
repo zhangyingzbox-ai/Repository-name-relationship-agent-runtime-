@@ -1,0 +1,10 @@
+.gocache/
+data/
+dist/
+
+*.exe
+*.log
+*.pid
+
+.DS_Store
+Thumbs.db
