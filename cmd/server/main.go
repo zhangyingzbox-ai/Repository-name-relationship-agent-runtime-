@@ -2,9 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"relationship-agent-runtime/internal/agent"
@@ -17,6 +21,13 @@ func main() {
 	runtime := agent.NewRuntime(memory.NewJSONStore(dataDir))
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		serveIndex(w)
+	})
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
@@ -38,8 +49,18 @@ func main() {
 		writeJSON(w, http.StatusOK, profile)
 	})
 
-	log.Printf("relationship agent runtime listening on %s, memory dir=%s", addr, dataDir)
+	log.Printf("relationship agent runtime API listening on %s, memory dir=%s", addr, dataDir)
+	log.Printf("This is the API server window. Do not type chat messages here. Use the CLI or POST /chat.")
+	log.Printf("Health: http://localhost%s/health", addr)
+	log.Printf("Web chat: http://localhost%s/", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
+		var opErr *net.OpError
+		if errors.As(err, &opErr) && strings.Contains(err.Error(), "bind") {
+			log.Printf("Port %s is already in use.", addr)
+			log.Printf("Close the old server window, or start this server with another port, for example:")
+			log.Printf("$env:ADDR=':8081'; .\\relationship-agent-runtime.exe")
+			os.Exit(1)
+		}
 		log.Fatal(err)
 	}
 }
@@ -50,6 +71,23 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		log.Printf("write json failed: %v", err)
 	}
+}
+
+func serveIndex(w http.ResponseWriter) {
+	candidates := []string{
+		filepath.Join("web", "index.html"),
+		filepath.Join("..", "..", "web", "index.html"),
+	}
+	for _, path := range candidates {
+		b, err := os.ReadFile(path)
+		if err == nil {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write(b)
+			return
+		}
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = fmt.Fprint(w, "<!doctype html><meta charset=\"utf-8\"><title>Relationship Agent Runtime</title><p>Web UI file not found. Use POST /chat or run the CLI.</p>")
 }
 
 func getenv(key, fallback string) string {
