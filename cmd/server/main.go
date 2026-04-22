@@ -18,7 +18,7 @@ import (
 func main() {
 	dataDir := getenv("MEMORY_DIR", "data/memory")
 	addr := getenv("ADDR", ":8080")
-	runtime := agent.NewRuntime(memory.NewJSONStore(dataDir))
+	runtime := agent.NewRuntimeFromEnv(memory.NewJSONStore(dataDir))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
@@ -50,6 +50,7 @@ func main() {
 	})
 
 	log.Printf("relationship agent runtime API listening on %s, memory dir=%s", addr, dataDir)
+	log.Printf("LLM mode: %s", llmMode())
 	log.Printf("This is the API server window. Do not type chat messages here. Use the CLI or POST /chat.")
 	log.Printf("Health: http://localhost%s/health", addr)
 	log.Printf("Web chat: http://localhost%s/", addr)
@@ -63,6 +64,15 @@ func main() {
 		}
 		log.Fatal(err)
 	}
+}
+
+func llmMode() string {
+	if strings.TrimSpace(os.Getenv("OPENAI_API_KEY")) == "" {
+		return "off; using deterministic local tools"
+	}
+	model := getenv("OPENAI_MODEL", "gpt-4o-mini")
+	baseURL := getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+	return fmt.Sprintf("on; model=%s base_url=%s", model, baseURL)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
