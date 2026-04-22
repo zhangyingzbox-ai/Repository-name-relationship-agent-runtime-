@@ -20,13 +20,16 @@ if ($goExe) {
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $out "data") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $out "logs") | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $out "web") | Out-Null
 
 $env:GOCACHE = Join-Path $root ".gocache"
 & $go test ./...
 & $go build -o (Join-Path $out "relationship-agent-runtime.exe") ./cmd/server
+& $go build -o (Join-Path $out "relationship-agent-cli.exe") ./cmd/cli
 
 Copy-Item (Join-Path $root "README.md") (Join-Path $out "README.md") -Force
 Copy-Item (Join-Path $root "docs\ARCHITECTURE.md") (Join-Path $out "ARCHITECTURE.md") -Force
+Copy-Item (Join-Path $root "web\index.html") (Join-Path $out "web\index.html") -Force
 
 @"
 ADDR=$Addr
@@ -45,10 +48,44 @@ New-Item -ItemType Directory -Force -Path `$env:MEMORY_DIR | Out-Null
 Write-Host "Relationship Agent Runtime listening on `$env:ADDR"
 Write-Host "Memory directory: `$env:MEMORY_DIR"
 Write-Host "Health: http://localhost$Addr/health"
+Write-Host "Web UI: http://localhost$Addr/"
+Write-Host ""
+Write-Host "This is the API server window. Do NOT type chat messages here."
+Write-Host "For direct chat, open another PowerShell and run: .\chat.ps1"
 Write-Host ""
 Write-Host "Press Ctrl+C to stop."
 & "`$here\relationship-agent-runtime.exe"
 "@ | Set-Content -Encoding UTF8 (Join-Path $out "run-server.ps1")
+
+@"
+`$ErrorActionPreference = "Stop"
+`$here = Split-Path -Parent `$MyInvocation.MyCommand.Path
+Set-Location `$here
+`$env:ADDR = ":8081"
+`$env:MEMORY_DIR = "data/memory-api-8081"
+New-Item -ItemType Directory -Force -Path `$env:MEMORY_DIR | Out-Null
+Write-Host "Relationship Agent Runtime API server on :8081"
+Write-Host "Health: http://localhost:8081/health"
+Write-Host "Web UI: http://localhost:8081/"
+Write-Host "This is the API server window. Do NOT type chat messages here."
+Write-Host "For direct chat, open another PowerShell and run: .\chat.ps1"
+Write-Host ""
+& "`$here\relationship-agent-runtime.exe"
+"@ | Set-Content -Encoding UTF8 (Join-Path $out "api-8081.ps1")
+
+@"
+`$ErrorActionPreference = "Stop"
+`$here = Split-Path -Parent `$MyInvocation.MyCommand.Path
+Set-Location `$here
+chcp 65001 | Out-Null
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new()
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+Write-Host "Relationship Agent Runtime Chat"
+Write-Host "This is the direct chat window. Type Chinese messages here."
+Write-Host "Tips: /trace toggles runtime trace, /exit quits."
+Write-Host ""
+& "`$here\relationship-agent-cli.exe" --user interactive-user --memory data\memory
+"@ | Set-Content -Encoding UTF8 (Join-Path $out "chat.ps1")
 
 @"
 `$ErrorActionPreference = "Stop"
