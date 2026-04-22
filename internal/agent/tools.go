@@ -33,18 +33,31 @@ func (e RuleBasedExtractor) Extract(message string) (memory.ExtractedFacts, erro
 	if v := firstGroup(msg, `(?:我叫|我的名字叫)([\p{Han}A-Za-z0-9_ -]{1,20})`); v != "" {
 		facts.BasicInfo.Name = cleanValue(v)
 	}
+	if facts.BasicInfo.Name == "" {
+		if v := firstGroup(msg, `(?:我是|我叫)\s*([A-Za-z][A-Za-z0-9_ -]{1,30})(?:\s|，|,|。|\.|$)`); v != "" && !looksLikeOccupation(v) {
+			facts.BasicInfo.Name = cleanValue(v)
+		}
+	}
 	if v := firstGroup(msg, `(?:我今年|年龄是)(\d{1,3})`); v != "" {
 		if age, err := strconv.Atoi(v); err == nil && age > 0 && age < 130 {
 			facts.BasicInfo.Age = age
 		}
 	}
 	if v := firstGroup(msg, `(?:我在|我住在|现在在|搬到|搬去了|已经搬到)([\p{Han}A-Za-z]{2,20})`); v != "" {
-		facts.BasicInfo.City = cleanValue(v)
+		v = cleanValue(v)
+		if !strings.Contains(v, "哪") && !strings.Contains(v, "哪里") && !strings.Contains(v, "什么") {
+			facts.BasicInfo.City = v
+		}
 	}
-	if v := firstGroup(msg, `(?:我是|职业是|工作是|，是|,是)([^，。,.!！]{1,24}(?:工程师|程序员|学生|老师|产品经理|设计师|医生|律师|运营|研究员))`); v != "" {
+	if v := firstGroup(msg, `(?:我是一名|我是一位|职业是|工作是|，是|,是)([^，。,.!！\s]{0,32}(?:CEO|CTO|CFO|COO|工程师|程序员|学生|老师|产品经理|设计师|医生|律师|运营|研究员|创始人|老板|首席执行官))`); v != "" {
 		facts.BasicInfo.Occupation = cleanValue(v)
 	}
-	if v := firstGroup(msg, `(?:作息是|通常|一般)([^，。,.!！]*(?:早睡|晚睡|熬夜|早起|夜班|九点睡|十二点睡)[^，。,.!！]*)`); v != "" {
+	if facts.BasicInfo.Occupation == "" {
+		if v := firstGroup(msg, `我是([^，。,.!！\s]{0,32}(?:CEO|CTO|CFO|COO|工程师|程序员|学生|老师|产品经理|设计师|医生|律师|运营|研究员|创始人|老板|首席执行官))`); v != "" {
+			facts.BasicInfo.Occupation = cleanValue(v)
+		}
+	}
+	if v := firstGroup(msg, `(?:作息是|通常|一般|最近)([^，。,.!！]*(?:早睡|晚睡|熬夜|早起|夜班|九点睡|十二点睡|睡得晚|睡眠不好)[^，。,.!！]*)`); v != "" {
 		facts.BasicInfo.Schedule = cleanValue(v)
 	}
 
@@ -61,12 +74,12 @@ func (e RuleBasedExtractor) Extract(message string) (memory.ExtractedFacts, erro
 	}
 	for label, intensity := range emotions {
 		if strings.Contains(msg, label) {
-			facts.EmotionalStates = append(facts.EmotionalStates, memory.EmotionState{Label: label, Intensity: intensity, Evidence: msg, ObservedAt: now})
+			facts.EmotionalStates = append(facts.EmotionalStates, memory.EmotionState{Label: label, Intensity: intensity, Reason: inferEmotionReason(msg, label), Evidence: msg, ObservedAt: now})
 			break
 		}
 	}
 
-	eventKeywords := []string{"考试", "面试", "搬家", "分手", "项目", "DDL", "答辩", "code review"}
+	eventKeywords := []string{"考试", "面试", "搬家", "搬到", "分手", "项目", "DDL", "答辩", "code review", "创业", "发布", "毕业", "结婚", "生病", "升职", "入职", "离职"}
 	for _, kw := range eventKeywords {
 		if strings.Contains(strings.ToLower(msg), strings.ToLower(kw)) {
 			facts.ImportantEvents = append(facts.ImportantEvents, memory.ImportantEvent{Name: kw, Status: inferEventStatus(msg), Evidence: msg, ObservedAt: now})
@@ -75,6 +88,10 @@ func (e RuleBasedExtractor) Extract(message string) (memory.ExtractedFacts, erro
 	}
 
 	if strings.Contains(msg, "温柔") {
+		facts.RelationshipPreference.Warmth = true
+		facts.RelationshipPreference.Tone = "warm"
+	}
+	if strings.Contains(msg, "冷冰冰") || strings.Contains(msg, "别太冷") || strings.Contains(msg, "不要太冷") {
 		facts.RelationshipPreference.Warmth = true
 		facts.RelationshipPreference.Tone = "warm"
 	}
@@ -140,6 +157,17 @@ func cleanValue(v string) string {
 	return strings.TrimSpace(v)
 }
 
+func looksLikeOccupation(v string) bool {
+	v = strings.ToLower(strings.TrimSpace(v))
+	occupations := []string{"ceo", "cto", "cfo", "coo", "engineer", "founder", "manager", "程序员", "工程师", "产品经理", "设计师", "医生", "老师", "学生", "律师", "运营", "研究员", "创始人", "老板", "首席执行官"}
+	for _, occupation := range occupations {
+		if strings.Contains(v, strings.ToLower(occupation)) {
+			return true
+		}
+	}
+	return false
+}
+
 func inferEventStatus(msg string) string {
 	switch {
 	case strings.Contains(msg, "明天") || strings.Contains(msg, "下周") || strings.Contains(msg, "快要"):
@@ -149,4 +177,21 @@ func inferEventStatus(msg string) string {
 	default:
 		return "mentioned"
 	}
+}
+
+func inferEmotionReason(msg, label string) string {
+	patterns := []string{
+		`因为([^，。,.!！]{1,40})`,
+		`压力(?:来自|来源是|是)([^，。,.!！]{1,40})`,
+		`([^，。,.!！]{1,40})让我` + regexp.QuoteMeta(label),
+	}
+	for _, pattern := range patterns {
+		if v := firstGroup(msg, pattern); v != "" {
+			v = cleanValue(v)
+			v = strings.TrimSuffix(v, "有点"+label)
+			v = strings.TrimSuffix(v, label)
+			return cleanValue(v)
+		}
+	}
+	return ""
 }
