@@ -11,6 +11,7 @@ import (
 type AgentRuntime struct {
 	Extractor ExtractionTool
 	Memory    MemoryTool
+	Replyer   ReplyTool
 	Sessions  map[string]*SessionState
 }
 
@@ -18,6 +19,7 @@ func NewRuntime(store memory.Store) *AgentRuntime {
 	return &AgentRuntime{
 		Extractor: RuleBasedExtractor{},
 		Memory:    PersistentMemoryTool{Store: store},
+		Replyer:   TemplateReplyTool{},
 		Sessions:  map[string]*SessionState{},
 	}
 }
@@ -26,6 +28,7 @@ func NewRuntimeWithTools(extractor ExtractionTool, memoryTool MemoryTool) *Agent
 	return &AgentRuntime{
 		Extractor: extractor,
 		Memory:    memoryTool,
+		Replyer:   TemplateReplyTool{},
 		Sessions:  map[string]*SessionState{},
 	}
 }
@@ -64,10 +67,10 @@ func (r *AgentRuntime) Chat(req ChatRequest) ChatResponse {
 
 	facts, err := r.Extractor.Extract(req.Message)
 	if err != nil {
-		add("Step2: Extract user information", "fallback", fmt.Sprintf("extraction failed: %v; continuing without new facts", err))
+		add("Step2: Extract user information", "fallback", fmt.Sprintf("%s failed: %v; continuing without new facts", r.Extractor.Name(), err))
 		facts = memory.ExtractedFacts{}
 	} else {
-		add("Step2: Extract user information", "ok", summarizeFacts(facts))
+		add("Step2: Extract user information", "ok", fmt.Sprintf("%s: %s", r.Extractor.Name(), summarizeFacts(facts)))
 	}
 
 	report := r.Memory.Update(profile, facts, req.Message)
@@ -87,9 +90,19 @@ func (r *AgentRuntime) Chat(req ChatRequest) ChatResponse {
 		add("Step4: Save memory", "ok", "profile persisted")
 	}
 
-	resp.FinalResponse = GenerateReply(profile, req.Message, report)
+	replyer := r.Replyer
+	if replyer == nil {
+		replyer = TemplateReplyTool{}
+	}
+	final, err := replyer.Generate(profile, req.Message, report)
+	if err != nil {
+		add("Step5: Generate reply", "fallback", fmt.Sprintf("%s failed: %v; using template reply", replyer.Name(), err))
+		final = GenerateReply(profile, req.Message, report)
+	} else {
+		add("Step5: Generate reply", "ok", fmt.Sprintf("%s generated reply from message plus current relationship memory", replyer.Name()))
+	}
+	resp.FinalResponse = final
 	resp.Profile = profile
-	add("Step5: Generate reply", "ok", "reply generated from message plus current relationship memory")
 	return resp
 }
 
@@ -474,3 +487,17 @@ func unique(values []string) []string {
 }
 
 var ErrNoMemoryTool = errors.New("memory tool is required")
+
+type TemplateReplyTool struct{}
+
+func (TemplateReplyTool) Name() string {
+	return "template_relationship_reply_tool"
+}
+
+func (TemplateReplyTool) Description() string {
+	return "Generates deterministic warm replies from structured relationship memory."
+}
+
+func (TemplateReplyTool) Generate(profile *memory.UserProfile, message string, report memory.UpdateReport) (string, error) {
+	return GenerateReply(profile, message, report), nil
+}
