@@ -1,6 +1,7 @@
 .gocache/
 data/
 dist/
+.env
 
 *.exe
 *.log
