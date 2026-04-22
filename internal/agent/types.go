@@ -36,6 +36,11 @@ type ExtractionTool interface {
 	Extract(message string) (memory.ExtractedFacts, error)
 }
 
+type ReplyTool interface {
+	Tool
+	Generate(profile *memory.UserProfile, message string, report memory.UpdateReport) (string, error)
+}
+
 type MemoryTool interface {
 	Tool
 	Load(userID string) (*memory.UserProfile, error)
