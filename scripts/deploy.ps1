@@ -30,6 +30,7 @@ $env:GOCACHE = Join-Path $root ".gocache"
 Copy-Item (Join-Path $root "README.md") (Join-Path $out "README.md") -Force
 Copy-Item (Join-Path $root "docs\ARCHITECTURE.md") (Join-Path $out "ARCHITECTURE.md") -Force
 Copy-Item (Join-Path $root "web\index.html") (Join-Path $out "web\index.html") -Force
+Copy-Item (Join-Path $root "scripts\setup-openai-key.ps1") (Join-Path $out "setup-openai-key.ps1") -Force
 
 @"
 ADDR=$Addr
