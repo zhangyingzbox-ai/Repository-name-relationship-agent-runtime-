@@ -65,6 +65,18 @@ go run ./cmd/server
 
 默认监听 `:8080`，默认记忆目录是 `data/memory`。
 
+启动后可以直接打开浏览器交互页面：
+
+```text
+http://localhost:8080/
+```
+
+页面会同时展示：
+
+- 对话消息
+- Agent Runtime 执行轨迹
+- 当前用户的结构化记忆
+
 可选环境变量：
 
 ```bash
