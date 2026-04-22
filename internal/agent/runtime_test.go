@@ -74,3 +74,59 @@ func TestExtractionFailureFallsBackAndContinues(t *testing.T) {
 		t.Fatalf("expected fallback trace, got %+v", resp.Trace)
 	}
 }
+
+func TestRemembersEnglishNameAndCEOOccupation(t *testing.T) {
+	runtime := NewRuntime(memory.NewJSONStore(t.TempDir()))
+	userID := "english-name-case"
+
+	runtime.Chat(ChatRequest{UserID: userID, Message: "我是Tony 我是一名CEO"})
+	resp := runtime.Chat(ChatRequest{UserID: userID, Message: "你能记得我的职业吗？"})
+
+	if resp.Profile.BasicInfo.Name != "Tony" {
+		t.Fatalf("expected name Tony, got %q", resp.Profile.BasicInfo.Name)
+	}
+	if resp.Profile.BasicInfo.Occupation != "CEO" {
+		t.Fatalf("expected occupation CEO, got %q", resp.Profile.BasicInfo.Occupation)
+	}
+	if !strings.Contains(resp.FinalResponse, "CEO") {
+		t.Fatalf("expected reply to recall CEO occupation, got %q", resp.FinalResponse)
+	}
+}
+
+func TestFullRelationshipMemoryAndWarmRecall(t *testing.T) {
+	runtime := NewRuntime(memory.NewJSONStore(t.TempDir()))
+	userID := "full-relationship-case"
+
+	runtime.Chat(ChatRequest{UserID: userID, Message: "我是Tony 我是一名CEO 我今年30岁 我现在在深圳"})
+	runtime.Chat(ChatRequest{UserID: userID, Message: "我喜欢咖啡，不喜欢冷冰冰的回复，最近因为融资面试有点焦虑，希望你温柔一点但也给我直接建议"})
+	runtime.Chat(ChatRequest{UserID: userID, Message: "我一般会熬夜，下周有项目DDL"})
+	resp := runtime.Chat(ChatRequest{UserID: userID, Message: "你记得我的职业、城市和偏好吗？"})
+
+	if resp.Profile.BasicInfo.Name != "Tony" {
+		t.Fatalf("expected name Tony, got %q", resp.Profile.BasicInfo.Name)
+	}
+	if resp.Profile.BasicInfo.Occupation != "CEO" {
+		t.Fatalf("expected occupation CEO, got %q", resp.Profile.BasicInfo.Occupation)
+	}
+	if resp.Profile.BasicInfo.City != "深圳" {
+		t.Fatalf("expected city 深圳, got %q", resp.Profile.BasicInfo.City)
+	}
+	if resp.Profile.BasicInfo.Age != 30 {
+		t.Fatalf("expected age 30, got %d", resp.Profile.BasicInfo.Age)
+	}
+	if len(resp.Profile.Preferences) < 2 {
+		t.Fatalf("expected like and dislike preferences, got %+v", resp.Profile.Preferences)
+	}
+	if len(resp.Profile.EmotionalStates) == 0 || resp.Profile.EmotionalStates[len(resp.Profile.EmotionalStates)-1].Label != "焦虑" {
+		t.Fatalf("expected anxiety emotion, got %+v", resp.Profile.EmotionalStates)
+	}
+	if len(resp.Profile.ImportantEvents) == 0 {
+		t.Fatalf("expected important events")
+	}
+	if !resp.Profile.RelationshipPreference.Warmth || !resp.Profile.RelationshipPreference.Rationality {
+		t.Fatalf("expected warm and rational relationship preference, got %+v", resp.Profile.RelationshipPreference)
+	}
+	if !strings.Contains(resp.FinalResponse, "当然记得") || !strings.Contains(resp.FinalResponse, "CEO") || !strings.Contains(resp.FinalResponse, "深圳") {
+		t.Fatalf("expected warm memory recall, got %q", resp.FinalResponse)
+	}
+}
