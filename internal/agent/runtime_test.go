@@ -130,3 +130,29 @@ func TestFullRelationshipMemoryAndWarmRecall(t *testing.T) {
 		t.Fatalf("expected warm memory recall, got %q", resp.FinalResponse)
 	}
 }
+
+func TestExtractsNaturalCityAndWarmRelationshipPreference(t *testing.T) {
+	runtime := NewRuntime(memory.NewJSONStore(t.TempDir()))
+	userID := "natural-city-warmth-case"
+
+	resp := runtime.Chat(ChatRequest{UserID: userID, Message: "你好，我叫Tony，是一名CEO，现在住在深圳。最近压力有点大，希望你说话温柔一点，像亲密的人陪我聊。"})
+
+	if resp.Profile.BasicInfo.Name != "Tony" {
+		t.Fatalf("expected name Tony, got %q", resp.Profile.BasicInfo.Name)
+	}
+	if resp.Profile.BasicInfo.Occupation != "一名CEO" {
+		t.Fatalf("expected occupation 一名CEO, got %q", resp.Profile.BasicInfo.Occupation)
+	}
+	if resp.Profile.BasicInfo.City != "深圳" {
+		t.Fatalf("expected city 深圳, got %q", resp.Profile.BasicInfo.City)
+	}
+	if len(resp.Profile.EmotionalStates) == 0 || resp.Profile.EmotionalStates[len(resp.Profile.EmotionalStates)-1].Label != "压力" {
+		t.Fatalf("expected pressure emotion, got %+v", resp.Profile.EmotionalStates)
+	}
+	if !resp.Profile.RelationshipPreference.Warmth || resp.Profile.RelationshipPreference.Tone != "warm" {
+		t.Fatalf("expected warm relationship preference, got %+v", resp.Profile.RelationshipPreference)
+	}
+	if !strings.Contains(resp.FinalResponse, "Tony") || !strings.Contains(resp.FinalResponse, "深圳") {
+		t.Fatalf("expected reply to use warm memory context, got %q", resp.FinalResponse)
+	}
+}
