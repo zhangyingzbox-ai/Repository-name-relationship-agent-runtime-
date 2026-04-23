@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"relationship-agent-runtime/internal/memory"
@@ -21,11 +22,13 @@ const (
 )
 
 type LLMConfig struct {
-	APIKey      string
-	BaseURL     string
-	Model       string
-	Temperature float64
-	Timeout     time.Duration
+	APIKey           string
+	BaseURL          string
+	Model            string
+	Temperature      float64
+	Timeout          time.Duration
+	MaxTokens        int
+	EnableExtraction bool
 }
 
 func LLMConfigFromEnv() LLMConfig {
@@ -34,7 +37,8 @@ func LLMConfigFromEnv() LLMConfig {
 		BaseURL:     strings.TrimRight(strings.TrimSpace(os.Getenv("OPENAI_BASE_URL")), "/"),
 		Model:       strings.TrimSpace(os.Getenv("OPENAI_MODEL")),
 		Temperature: 0.7,
-		Timeout:     25 * time.Second,
+		Timeout:     6 * time.Second,
+		MaxTokens:   220,
 	}
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = defaultOpenAIBaseURL
@@ -52,6 +56,12 @@ func LLMConfigFromEnv() LLMConfig {
 			cfg.Timeout = time.Duration(parsed) * time.Second
 		}
 	}
+	if v := strings.TrimSpace(os.Getenv("OPENAI_MAX_TOKENS")); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+			cfg.MaxTokens = parsed
+		}
+	}
+	cfg.EnableExtraction = parseBoolEnv("OPENAI_ENABLE_LLM_EXTRACT")
 	return cfg
 }
 
@@ -66,17 +76,21 @@ func NewRuntimeFromEnv(store memory.Store) *AgentRuntime {
 		return rt
 	}
 	client := NewOpenAICompatibleClient(cfg)
-	rt.Extractor = FallbackExtractionTool{
-		Primary:  LLMExtractionTool{Client: client},
-		Fallback: RuleBasedExtractor{},
+	if cfg.EnableExtraction {
+		rt.Extractor = FallbackExtractionTool{
+			Primary:  LLMExtractionTool{Client: client},
+			Fallback: RuleBasedExtractor{},
+		}
 	}
 	rt.Replyer = LLMReplyTool{Client: client}
 	return rt
 }
 
 type OpenAICompatibleClient struct {
-	cfg    LLMConfig
-	client *http.Client
+	cfg              LLMConfig
+	client           *http.Client
+	mu               sync.Mutex
+	circuitOpenUntil time.Time
 }
 
 func NewOpenAICompatibleClient(cfg LLMConfig) *OpenAICompatibleClient {
@@ -87,11 +101,24 @@ func NewOpenAICompatibleClient(cfg LLMConfig) *OpenAICompatibleClient {
 		cfg.Model = defaultOpenAIModel
 	}
 	if cfg.Timeout <= 0 {
-		cfg.Timeout = 25 * time.Second
+		cfg.Timeout = 6 * time.Second
+	}
+	if cfg.MaxTokens <= 0 {
+		cfg.MaxTokens = 220
 	}
 	return &OpenAICompatibleClient{
-		cfg:    cfg,
-		client: &http.Client{Timeout: cfg.Timeout},
+		cfg: cfg,
+		client: &http.Client{
+			Timeout: cfg.Timeout,
+			Transport: &http.Transport{
+				Proxy:                 http.ProxyFromEnvironment,
+				MaxIdleConns:          20,
+				MaxIdleConnsPerHost:   10,
+				IdleConnTimeout:       90 * time.Second,
+				TLSHandshakeTimeout:   8 * time.Second,
+				ExpectContinueTimeout: 1 * time.Second,
+			},
+		},
 	}
 }
 
@@ -99,6 +126,7 @@ type chatCompletionRequest struct {
 	Model       string        `json:"model"`
 	Messages    []chatMessage `json:"messages"`
 	Temperature float64       `json:"temperature,omitempty"`
+	MaxTokens   int           `json:"max_tokens,omitempty"`
 }
 
 type chatMessage struct {
@@ -123,6 +151,9 @@ func (c *OpenAICompatibleClient) Complete(systemPrompt, userPrompt string, tempe
 	if strings.TrimSpace(c.cfg.APIKey) == "" {
 		return "", errors.New("OPENAI_API_KEY is empty")
 	}
+	if until, open := c.circuitOpen(); open {
+		return "", fmt.Errorf("llm circuit open until %s", until.Format(time.RFC3339))
+	}
 	reqBody := chatCompletionRequest{
 		Model: c.cfg.Model,
 		Messages: []chatMessage{
@@ -130,6 +161,7 @@ func (c *OpenAICompatibleClient) Complete(systemPrompt, userPrompt string, tempe
 			{Role: "user", Content: userPrompt},
 		},
 		Temperature: temperature,
+		MaxTokens:   c.cfg.MaxTokens,
 	}
 	b, err := json.Marshal(reqBody)
 	if err != nil {
@@ -143,6 +175,7 @@ func (c *OpenAICompatibleClient) Complete(systemPrompt, userPrompt string, tempe
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.client.Do(req)
 	if err != nil {
+		c.openCircuit()
 		return "", err
 	}
 	defer resp.Body.Close()
@@ -155,6 +188,9 @@ func (c *OpenAICompatibleClient) Complete(systemPrompt, userPrompt string, tempe
 		return "", fmt.Errorf("decode llm response: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+			c.openCircuit()
+		}
 		if parsed.Error != nil && parsed.Error.Message != "" {
 			return "", fmt.Errorf("llm http %d: %s", resp.StatusCode, parsed.Error.Message)
 		}
@@ -164,6 +200,21 @@ func (c *OpenAICompatibleClient) Complete(systemPrompt, userPrompt string, tempe
 		return "", errors.New("llm returned empty completion")
 	}
 	return strings.TrimSpace(parsed.Choices[0].Message.Content), nil
+}
+
+func (c *OpenAICompatibleClient) circuitOpen() (time.Time, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if time.Now().Before(c.circuitOpenUntil) {
+		return c.circuitOpenUntil, true
+	}
+	return time.Time{}, false
+}
+
+func (c *OpenAICompatibleClient) openCircuit() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.circuitOpenUntil = time.Now().Add(45 * time.Second)
 }
 
 type FallbackExtractionTool struct {
@@ -254,7 +305,7 @@ func (LLMReplyTool) Description() string {
 }
 
 func (t LLMReplyTool) Generate(profile *memory.UserProfile, message string, report memory.UpdateReport) (string, error) {
-	profileJSON, _ := json.Marshal(profile)
+	profileJSON, _ := json.Marshal(compactProfileForLLM(profile))
 	reportJSON, _ := json.Marshal(report)
 	system := `你是一个温柔、稳定、有边界感的人机关系 Agent。你要像持续认识用户的人一样说话。
 规则：
@@ -265,6 +316,47 @@ func (t LLMReplyTool) Generate(profile *memory.UserProfile, message string, repo
 5. 不要输出执行轨迹，执行轨迹由 Runtime 单独展示。`
 	user := fmt.Sprintf("用户消息：%s\n\n当前结构化记忆：%s\n\n本轮记忆更新报告：%s", message, profileJSON, reportJSON)
 	return t.Client.Complete(system, user, t.Client.cfg.Temperature)
+}
+
+func compactProfileForLLM(profile *memory.UserProfile) map[string]any {
+	if profile == nil {
+		return map[string]any{}
+	}
+	out := map[string]any{
+		"user_id":                 profile.UserID,
+		"basic_info":              profile.BasicInfo,
+		"relationship_preference": profile.RelationshipPreference,
+		"relationship_state":      profile.RelationshipState,
+	}
+	if n := len(profile.Preferences); n > 0 {
+		start := n - 6
+		if start < 0 {
+			start = 0
+		}
+		out["recent_preferences"] = profile.Preferences[start:]
+	}
+	if n := len(profile.EmotionalStates); n > 0 {
+		start := n - 3
+		if start < 0 {
+			start = 0
+		}
+		out["recent_emotions"] = profile.EmotionalStates[start:]
+	}
+	if n := len(profile.ImportantEvents); n > 0 {
+		start := n - 4
+		if start < 0 {
+			start = 0
+		}
+		out["recent_events"] = profile.ImportantEvents[start:]
+	}
+	if n := len(profile.Conflicts); n > 0 {
+		start := n - 2
+		if start < 0 {
+			start = 0
+		}
+		out["recent_conflicts"] = profile.Conflicts[start:]
+	}
+	return out
 }
 
 func extractJSONObject(raw string) string {
@@ -281,4 +373,13 @@ func extractJSONObject(raw string) string {
 		return raw[start : end+1]
 	}
 	return raw
+}
+
+func parseBoolEnv(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
