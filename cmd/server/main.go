@@ -31,6 +31,9 @@ func main() {
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
+	mux.HandleFunc("GET /llm-status", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, checkLLMStatus())
+	})
 	mux.HandleFunc("POST /chat", func(w http.ResponseWriter, r *http.Request) {
 		var req agent.ChatRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -73,6 +76,36 @@ func llmMode() string {
 	model := getenv("OPENAI_MODEL", "gpt-4o-mini")
 	baseURL := getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
 	return fmt.Sprintf("on; model=%s base_url=%s", model, baseURL)
+}
+
+func checkLLMStatus() map[string]any {
+	key := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+	baseURL := strings.TrimRight(getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"), "/")
+	model := getenv("OPENAI_MODEL", "gpt-4o-mini")
+	if key == "" {
+		return map[string]any{
+			"ok":      false,
+			"mode":    "off",
+			"model":   model,
+			"baseURL": baseURL,
+			"detail":  "OPENAI_API_KEY is not configured",
+		}
+	}
+	client := &http.Client{Timeout: agent.LLMConfigFromEnv().Timeout}
+	req, err := http.NewRequest(http.MethodGet, baseURL+"/models", nil)
+	if err != nil {
+		return map[string]any{"ok": false, "mode": "error", "model": model, "baseURL": baseURL, "detail": err.Error()}
+	}
+	req.Header.Set("Authorization", "Bearer "+key)
+	resp, err := client.Do(req)
+	if err != nil {
+		return map[string]any{"ok": false, "mode": "network_error", "model": model, "baseURL": baseURL, "detail": err.Error()}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return map[string]any{"ok": true, "mode": "on", "model": model, "baseURL": baseURL, "detail": "LLM API reachable"}
+	}
+	return map[string]any{"ok": false, "mode": "http_error", "model": model, "baseURL": baseURL, "detail": fmt.Sprintf("LLM API returned HTTP %d", resp.StatusCode)}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
