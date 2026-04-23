@@ -43,8 +43,8 @@ func (e RuleBasedExtractor) Extract(message string) (memory.ExtractedFacts, erro
 			facts.BasicInfo.Age = age
 		}
 	}
-	if v := firstGroup(msg, `(?:我在|我住在|现在在|搬到|搬去了|已经搬到)([\p{Han}A-Za-z]{2,20})`); v != "" {
-		v = cleanValue(v)
+	if v := firstGroup(msg, `(?:我在|我住在|现在在|现在住在|目前在|目前住在|住在|搬到|搬去了|已经搬到)([\p{Han}A-Za-z]{2,16})(?:[，。,.!！\s]|$)`); v != "" {
+		v = cleanCityValue(v)
 		if !strings.Contains(v, "哪") && !strings.Contains(v, "哪里") && !strings.Contains(v, "什么") {
 			facts.BasicInfo.City = v
 		}
@@ -153,6 +153,15 @@ func cleanValue(v string) string {
 	stopWords := []string{"了", "呀", "啊", "吧", "呢"}
 	for _, sw := range stopWords {
 		v = strings.TrimSuffix(v, sw)
+	}
+	return strings.TrimSpace(v)
+}
+
+func cleanCityValue(v string) string {
+	v = cleanValue(v)
+	suffixes := []string{"生活", "工作", "上班", "读书", "居住", "住着", "住了", "了"}
+	for _, suffix := range suffixes {
+		v = strings.TrimSuffix(v, suffix)
 	}
 	return strings.TrimSpace(v)
 }
