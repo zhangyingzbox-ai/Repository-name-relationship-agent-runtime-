@@ -18,28 +18,22 @@
 没有设置 API key 时，系统使用本地规则抽取和模板回复；设置 `OPENAI_API_KEY` 后自动启用大模型：
 
 - `LLMExtractionTool`：用大模型抽取结构化关系记忆。
-- `LLMReplyTool`：用大模型生成更自然、更温柔的关系型回复。
+- `LLMReplyTool`：用大模型生成更自然的关系型回复。
 - `FallbackExtractionTool`：LLM 抽取失败时自动退回 `RuleBasedExtractor`。
 - `TemplateReplyTool`：LLM 回复失败时自动退回模板回复。
 
-### 申请 API key
-
-打开：<https://platform.openai.com/api-keys>
-
-创建 secret key 后，只保存在本机环境变量里，不要提交到 GitHub。
-
 ### 安全设置 API key
 
-推荐使用脚本，输入时不会明文显示：
+不要把真实 API key 写入代码、README、提交记录或 GitHub。推荐使用脚本在本机隐藏输入：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\setup-openai-key.ps1
 ```
 
-也可以手动设置当前 PowerShell 窗口：
+也可以只在当前 PowerShell 窗口临时设置：
 
 ```powershell
-$env:OPENAI_API_KEY="sk-你的key"
+$env:OPENAI_API_KEY="<OPENAI_API_KEY>"
 $env:OPENAI_MODEL="gpt-4o-mini"
 $env:OPENAI_BASE_URL="https://api.openai.com/v1"
 ```
@@ -47,7 +41,7 @@ $env:OPENAI_BASE_URL="https://api.openai.com/v1"
 长期保存到 Windows 用户环境变量：
 
 ```powershell
-[Environment]::SetEnvironmentVariable("OPENAI_API_KEY", "sk-你的key", "User")
+[Environment]::SetEnvironmentVariable("OPENAI_API_KEY", "<OPENAI_API_KEY>", "User")
 [Environment]::SetEnvironmentVariable("OPENAI_MODEL", "gpt-4o-mini", "User")
 [Environment]::SetEnvironmentVariable("OPENAI_BASE_URL", "https://api.openai.com/v1", "User")
 ```
@@ -73,39 +67,31 @@ llm_relationship_reply_tool...
 
 ## 运行
 
-### 运行测试
+运行测试：
 
 ```powershell
 go test ./...
 ```
 
-### 启动 HTTP 服务
+启动 HTTP 服务：
 
 ```powershell
 go run ./cmd/server
 ```
 
-默认地址：
+默认页面：
 
 ```text
 http://localhost:8080/
 ```
 
-健康检查：
-
-```text
-http://localhost:8080/health
-```
-
-### 命令行交互
+CLI：
 
 ```powershell
 go run ./cmd/cli --user u1
 ```
 
-输入 `/exit` 退出，输入 `/trace` 切换执行轨迹显示。
-
-### 生成部署包
+生成部署包：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1
@@ -115,21 +101,6 @@ powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1
 
 ```text
 dist\relationship-agent-runtime
-```
-
-启动部署包：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\dist\relationship-agent-runtime\run-server.ps1
-```
-
-部署包内也会包含：
-
-```text
-setup-openai-key.ps1
-chat.ps1
-run-server.ps1
-api-8081.ps1
 ```
 
 ## HTTP API
@@ -175,17 +146,8 @@ web/
 - `TestBuildRelationshipAcrossThreeTurns`：正常建立关系，至少三轮对话使用前文记忆。
 - `TestMemoryConflictUpdatesLatestCityAndKeepsHistory`：城市冲突更新，保留旧值历史。
 - `TestExtractionFailureFallsBackAndContinues`：抽取失败 fallback，Runtime 不崩溃。
-- `TestFullRelationshipMemoryAndWarmRecall`：覆盖姓名、年龄、职业、城市、偏好、情绪、事件、关系偏好和温柔召回。
+- `TestFullRelationshipMemoryAndWarmRecall`：覆盖姓名、年龄、职业、城市、偏好、情绪、事件、关系偏好和召回。
 
-## 风险与优化
+## 安全说明
 
-最容易出错的是信息抽取。当前规则抽取能兜底，但复杂表达、反讽、隐含信息可能抽取不准。LLM 抽取能提升效果，但需要处理 JSON 格式错误、网络失败、费用和延迟。
-
-10 万用户后的瓶颈主要是 JSON 文件存储、完整 profile 读写、单机 `SessionState`、LLM 调用成本和延迟。优化方向包括 PostgreSQL/KV 存储、Redis 短期记忆、事件日志、异步摘要整理、记忆分块检索、服务无状态化、工具超时重试和熔断。
-
-## 禁止事项对照
-
-- 没有使用 LangChain / AutoGen / CrewAI。
-- 没有调用封装 Agent API。
-- Agent Runtime、工具机制、状态管理、记忆读写由本项目实现。
-- 后端为 Go，可通过 HTTP API 或 CLI 重复运行并保留记忆。
+本仓库不应包含真实 API key。`.gitignore` 已忽略 `.env` 和 `.env.*`，仅允许提交 `.env.example`。如果真实 key 曾经被公开，请到 OpenAI 控制台撤销旧 key 并生成新 key。
