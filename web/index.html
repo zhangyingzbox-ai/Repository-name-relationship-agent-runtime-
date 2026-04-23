@@ -5,18 +5,289 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Relationship Agent Runtime</title>
   <style>
-    :root { color-scheme: light; --ink:#1f2328; --muted:#667085; --line:#d8dee8; --paper:#fbfcfe; --user:#e8f2ff; --agent:#fff4ea; --accent:#b54f2f; --accent-2:#245b78; --good:#2f7d58; }
-    *{box-sizing:border-box} body{margin:0;min-height:100vh;color:var(--ink);font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;background:#eef3f7}.shell{min-height:100vh;display:grid;grid-template-columns:minmax(0,1fr) 360px}main{display:grid;grid-template-rows:auto minmax(0,1fr) auto;min-width:0;background:var(--paper)}header{padding:18px 24px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:16px}h1{margin:0;font-size:19px;letter-spacing:0}.status{display:inline-flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;white-space:nowrap}.dot{width:9px;height:9px;border-radius:50%;background:var(--good)}.chat{padding:22px 24px;overflow:auto;display:flex;flex-direction:column;gap:14px}.msg{max-width:78%;padding:13px 15px;border:1px solid var(--line);line-height:1.62;font-size:15px;white-space:pre-wrap}.msg.agent{align-self:flex-start;background:var(--agent);border-color:#ead1bb;border-radius:8px 8px 8px 2px}.msg.user{align-self:flex-end;background:var(--user);border-color:#c6dcf2;border-radius:8px 8px 2px 8px}form{border-top:1px solid var(--line);padding:16px 24px 18px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;background:#fff}textarea{width:100%;min-height:48px;max-height:140px;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:12px 13px;font:inherit;line-height:1.5;outline:none}textarea:focus{border-color:var(--accent-2);box-shadow:0 0 0 3px rgba(36,91,120,.12)}button{border:0;border-radius:8px;padding:0 18px;min-width:88px;color:#fff;background:var(--accent-2);font:inherit;font-weight:600;cursor:pointer}button:disabled{opacity:.55;cursor:wait}aside{border-left:1px solid var(--line);background:#f7f9fb;display:grid;grid-template-rows:auto minmax(0,1fr) minmax(0,1fr);min-width:0}.side-section{padding:18px;border-bottom:1px solid var(--line);overflow:auto;min-width:0}.side-section h2{margin:0 0 12px;font-size:15px;color:var(--accent)}label{display:block;margin-bottom:7px;color:var(--muted);font-size:13px}input{width:100%;border:1px solid var(--line);border-radius:8px;padding:10px 11px;font:inherit;background:#fff}pre{margin:0;white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.48;color:#344054}.quick{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.quick button{min-width:0;padding:8px 10px;color:var(--accent-2);background:#e9f1f6;font-size:13px;font-weight:500}@media(max-width:900px){.shell{grid-template-columns:1fr}aside{grid-template-rows:auto auto auto;border-left:0;border-top:1px solid var(--line)}.msg{max-width:92%}}
+    :root {
+      color-scheme: light;
+      --ink: #1f2328;
+      --muted: #667085;
+      --line: #d8dee8;
+      --paper: #fbfcfe;
+      --user: #e8f2ff;
+      --agent: #fff4ea;
+      --accent: #b54f2f;
+      --accent-2: #245b78;
+      --good: #2f7d58;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+      background: #eef3f7;
+    }
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+    }
+    main {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      min-width: 0;
+      background: var(--paper);
+    }
+    header {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 19px;
+      letter-spacing: 0;
+    }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--good);
+    }
+    .chat {
+      padding: 22px 24px;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .msg {
+      max-width: 78%;
+      padding: 13px 15px;
+      border: 1px solid var(--line);
+      line-height: 1.62;
+      font-size: 15px;
+      white-space: pre-wrap;
+    }
+    .msg.agent {
+      align-self: flex-start;
+      background: var(--agent);
+      border-color: #ead1bb;
+      border-radius: 8px 8px 8px 2px;
+    }
+    .msg.user {
+      align-self: flex-end;
+      background: var(--user);
+      border-color: #c6dcf2;
+      border-radius: 8px 8px 2px 8px;
+    }
+    form {
+      border-top: 1px solid var(--line);
+      padding: 16px 24px 18px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      background: #fff;
+    }
+    textarea {
+      width: 100%;
+      min-height: 48px;
+      max-height: 140px;
+      resize: vertical;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px 13px;
+      font: inherit;
+      line-height: 1.5;
+      outline: none;
+    }
+    textarea:focus { border-color: var(--accent-2); box-shadow: 0 0 0 3px rgba(36, 91, 120, .12); }
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 0 18px;
+      min-width: 88px;
+      color: #fff;
+      background: var(--accent-2);
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { opacity: .55; cursor: wait; }
+    aside {
+      border-left: 1px solid var(--line);
+      background: #f7f9fb;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
+      min-width: 0;
+    }
+    .side-section {
+      padding: 18px;
+      border-bottom: 1px solid var(--line);
+      overflow: auto;
+      min-width: 0;
+    }
+    .side-section h2 {
+      margin: 0 0 12px;
+      font-size: 15px;
+      color: var(--accent);
+    }
+    label {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 11px;
+      font: inherit;
+      background: #fff;
+    }
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 12px;
+      line-height: 1.48;
+      color: #344054;
+    }
+    .quick {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .quick button {
+      min-width: 0;
+      padding: 8px 10px;
+      color: var(--accent-2);
+      background: #e9f1f6;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    @media (max-width: 900px) {
+      .shell { grid-template-columns: 1fr; }
+      aside { grid-template-rows: auto auto auto; border-left: 0; border-top: 1px solid var(--line); }
+      .msg { max-width: 92%; }
+    }
   </style>
 </head>
 <body>
-  <div class="shell"><main><header><h1>Relationship Agent Runtime</h1><div class="status"><span class="dot"></span><span id="health">连接中</span></div></header><section class="chat" id="chat"><div class="msg agent">我在。你可以直接告诉我你的名字、职业、城市、喜欢或不喜欢的事，或者最近让你有压力的事情。我会一边和你聊，一边把重要信息整理成结构化记忆。</div></section><form id="form"><textarea id="message" placeholder="输入一句话，比如：我是Tony，我是一名CEO，我现在在深圳。"></textarea><button id="send" type="submit">发送</button></form></main><aside><section class="side-section"><label for="user">用户 ID</label><input id="user" value="web-demo" /><div class="quick"><button type="button" data-say="我是Tony，我是一名CEO，我现在在深圳。">建立画像</button><button type="button" data-say="最近因为融资面试有点焦虑，希望你温柔一点但也给我直接建议。">情绪偏好</button><button type="button" data-say="你记得我的职业和城市吗？">查询记忆</button><button type="button" data-say="其实我已经搬到上海了。">冲突更新</button></div></section><section class="side-section"><h2>执行轨迹</h2><pre id="trace">等待对话。</pre></section><section class="side-section"><h2>结构化记忆</h2><pre id="profile">等待记忆写入。</pre></section></aside></div>
+  <div class="shell">
+    <main>
+      <header>
+        <h1>Relationship Agent Runtime</h1>
+        <div class="status"><span class="dot"></span><span id="health">连接中</span></div>
+      </header>
+      <section class="chat" id="chat">
+        <div class="msg agent">我在。你可以直接告诉我你的名字、职业、城市、喜欢或不喜欢的事，或者最近让你有压力的事情。我会一边和你聊，一边把重要信息整理成结构化记忆。</div>
+      </section>
+      <form id="form">
+        <textarea id="message" placeholder="输入一句话，比如：我是Tony，我是一名CEO，我现在在深圳。"></textarea>
+        <button id="send" type="submit">发送</button>
+      </form>
+    </main>
+    <aside>
+      <section class="side-section">
+        <label for="user">用户 ID</label>
+        <input id="user" value="web-demo" />
+        <div class="quick">
+          <button type="button" data-say="我是Tony，我是一名CEO，我现在在深圳。">建立画像</button>
+          <button type="button" data-say="最近因为融资面试有点焦虑，希望你温柔一点但也给我直接建议。">情绪偏好</button>
+          <button type="button" data-say="你记得我的职业和城市吗？">查询记忆</button>
+          <button type="button" data-say="其实我已经搬到上海了。">冲突更新</button>
+        </div>
+      </section>
+      <section class="side-section">
+        <h2>执行轨迹</h2>
+        <pre id="trace">等待对话。</pre>
+      </section>
+      <section class="side-section">
+        <h2>结构化记忆</h2>
+        <pre id="profile">等待记忆写入。</pre>
+      </section>
+    </aside>
+  </div>
   <script>
-    const chat=document.querySelector('#chat'),form=document.querySelector('#form'),msg=document.querySelector('#message'),send=document.querySelector('#send'),user=document.querySelector('#user'),trace=document.querySelector('#trace'),profile=document.querySelector('#profile'),health=document.querySelector('#health');
-    function addMessage(role,text){const div=document.createElement('div');div.className=`msg ${role}`;div.textContent=text;chat.appendChild(div);chat.scrollTop=chat.scrollHeight}
-    async function checkHealth(){try{const res=await fetch('/health');health.textContent=res.ok?'API 在线':'API 异常'}catch{health.textContent='API 未连接'}}
-    async function sendMessage(text){const content=text.trim();if(!content)return;addMessage('user',content);msg.value='';send.disabled=true;try{const res=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json; charset=utf-8'},body:JSON.stringify({user_id:user.value.trim()||'web-demo',message:content})});const data=await res.json();addMessage('agent',data.final_response||'我收到了，但这次回复生成得不太完整。');trace.textContent=(data.trace||[]).map(s=>`${s.step}\n${s.status}: ${s.detail}`).join('\n\n');profile.textContent=JSON.stringify(data.profile||{},null,2)}catch(err){addMessage('agent','我这边连接 API 时出错了。先别急，确认服务窗口还开着，然后再试一次。');trace.textContent=String(err)}finally{send.disabled=false;msg.focus()}}
-    form.addEventListener('submit',e=>{e.preventDefault();sendMessage(msg.value)});msg.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();form.requestSubmit()}});document.querySelectorAll('[data-say]').forEach(button=>{button.addEventListener('click',()=>sendMessage(button.dataset.say))});checkHealth();
+    const chat = document.querySelector("#chat");
+    const form = document.querySelector("#form");
+    const msg = document.querySelector("#message");
+    const send = document.querySelector("#send");
+    const user = document.querySelector("#user");
+    const trace = document.querySelector("#trace");
+    const profile = document.querySelector("#profile");
+    const health = document.querySelector("#health");
+
+    function addMessage(role, text) {
+      const div = document.createElement("div");
+      div.className = `msg ${role}`;
+      div.textContent = text;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    async function checkHealth() {
+      try {
+        const res = await fetch("/health");
+        health.textContent = res.ok ? "API 在线" : "API 异常";
+      } catch {
+        health.textContent = "API 未连接";
+      }
+    }
+
+    async function sendMessage(text) {
+      const content = text.trim();
+      if (!content) return;
+      const startedAt = performance.now();
+      addMessage("user", content);
+      msg.value = "";
+      send.disabled = true;
+      try {
+        const res = await fetch("/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+          body: JSON.stringify({ user_id: user.value.trim() || "web-demo", message: content })
+        });
+        const data = await res.json();
+        addMessage("agent", data.final_response || "我收到了，但这次回复生成得不太完整。");
+        const elapsed = Math.round(performance.now() - startedAt);
+        trace.textContent = [`Total latency: ${elapsed} ms`].concat((data.trace || []).map(s => `${s.step}\n${s.status}: ${s.detail}`)).join("\n\n");
+        profile.textContent = JSON.stringify(data.profile || {}, null, 2);
+      } catch (err) {
+        addMessage("agent", "我这边连接 API 时出错了。先别急，确认服务窗口还开着，然后再试一次。");
+        trace.textContent = String(err);
+      } finally {
+        send.disabled = false;
+        msg.focus();
+      }
+    }
+
+    form.addEventListener("submit", e => {
+      e.preventDefault();
+      sendMessage(msg.value);
+    });
+    msg.addEventListener("keydown", e => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        form.requestSubmit();
+      }
+    });
+    document.querySelectorAll("[data-say]").forEach(button => {
+      button.addEventListener("click", () => sendMessage(button.dataset.say));
+    });
+    checkHealth();
   </script>
 </body>
 </html>
